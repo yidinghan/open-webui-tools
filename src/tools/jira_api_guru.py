@@ -13,7 +13,7 @@ import requests
 import json
 import os
 from typing import Dict, List, Any, Optional, Union, Callable, Awaitable
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class EventEmitter:
@@ -157,12 +157,10 @@ class Tools:
             description="默认的 Jira 个人访问令牌 (如果用户未提供则使用此令牌)",
         )
 
-        @validator("base_url")
+        @field_validator('base_url')
         def validate_url(cls, v):
             if not v:
-                return v
-            if not v.startswith(("http://", "https://")):
-                raise ValueError("URL 必须以 http:// 或 https:// 开头")
+                raise ValueError("Base URL cannot be empty")
             return v
 
     def _get_jira_auth_token(self, __user__: dict = {}) -> Optional[str]:
@@ -226,7 +224,9 @@ class Tools:
             else:
                 raise ValueError(f"不支持的请求方法: {method}")
 
-            response.raise_for_status()
+            if response.status_code != 200:
+                error_message = response.text
+                return json.dumps({"error": f"请求失败，状态码: {response.status_code}, 错误信息: {error_message}, 请求 URL: {url}"}, ensure_ascii=False)
 
             # 检查响应是否包含内容
             if response.text.strip():
