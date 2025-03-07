@@ -1599,3 +1599,184 @@ class Tools:
 
             error_response = {"error": f"获取问题解决结果失败: {error_message}"}
             return json.dumps(error_response, ensure_ascii=False)
+
+    async def jira_get_worklogs(self, issue_key: str, start_at: int = 0, max_results: int = 50, __user__: dict = {}, __event_emitter__: Callable[[dict], Awaitable[None]] = None) -> str:
+        """
+        获取问题的工作日志
+
+        :param issue_key: 问题的键值，例如 PROJECT-123
+        :param start_at: 起始索引
+        :param max_results: 最大结果数
+        :return: 工作日志列表 JSON 字符串
+        """
+        event_emitter = None
+        if __event_emitter__:
+            event_emitter = EventEmitter(__event_emitter__)
+            await event_emitter.emit_status(f"正在获取问题 {issue_key} 的工作日志", False)
+
+        try:
+            params = {
+                "startAt": start_at,
+                "maxResults": max_results
+            }
+
+            result = self._make_jira_request("GET", f"/issue/{issue_key}/worklog", __user__, params=params)
+
+            if event_emitter:
+                result_obj = json.loads(result)
+                if "error" in result_obj:
+                    await event_emitter.emit_status(f"获取工作日志失败: {result_obj['error']}", True, True)
+                else:
+                    worklogs = result_obj.get("worklogs", [])
+                    total = result_obj.get("total", 0)
+                    issue_url = f"{self._get_jira_server()}/browse/{issue_key}"
+
+                    if not worklogs:
+                        await event_emitter.emit_message(f"""
+### 📋 问题工作日志
+
+问题 [{issue_key}]({issue_url}) 没有工作日志
+""")
+                    else:
+                        # 准备表格数据
+                        rows = []
+                        for worklog in worklogs:
+                            id = worklog.get("id", "")
+                            author = worklog.get("author", {}).get("displayName", "未知用户")
+                            time_spent = worklog.get("timeSpent", "0m")
+                            description = worklog.get("description", "无描述")
+                            created = worklog.get("created", "")
+
+                            rows.append([id, author, time_spent, description, created])
+
+                        # 显示分页信息
+                        start = start_at + 1
+                        end = min(start_at + len(worklogs), total)
+                        pagination = f"显示 {start} 到 {end}，共 {total} 个结果"
+
+                        await event_emitter.emit_table(
+                            ["ID", "作者", "花费时间", "描述", "创建时间"],
+                            rows,
+                            f"问题 {issue_key} 的工作日志: {pagination}"
+                        )
+
+                    await event_emitter.emit_status(f"已获取问题 {issue_key} 的工作日志", True)
+
+            return result
+
+        except Exception as e:
+            error_message = str(e)
+            if event_emitter:
+                await event_emitter.emit_status(f"获取工作日志失败: {error_message}", True, True)
+
+            error_response = {"error": f"获取问题工作日志失败: {error_message}"}
+            return json.dumps(error_response, ensure_ascii=False)
+
+    async def jira_add_worklog(self, issue_key: str, time_spent: str, description: str = None, __user__: dict = {}, __event_emitter__: Callable[[dict], Awaitable[None]] = None) -> str:
+        """
+        添加工作日志到问题
+
+        :param issue_key: 问题的键值，例如 PROJECT-123
+        :param time_spent: 花费时间，格式如 "2h" 或 "30m"
+        :param description: 工作日志描述 (可选)
+        :return: 创建的工作日志信息 JSON 字符串
+        """
+        event_emitter = None
+        if __event_emitter__:
+            event_emitter = EventEmitter(__event_emitter__)
+            await event_emitter.emit_status(f"正在向问题 {issue_key} 添加工作日志", False)
+
+        try:
+            data = {
+                "timeSpent": time_spent
+            }
+
+            if description:
+                data["description"] = description
+
+            result = self._make_jira_request("POST", f"/issue/{issue_key}/worklog", __user__, data=data)
+
+            if event_emitter:
+                result_obj = json.loads(result)
+                if "error" in result_obj:
+                    await event_emitter.emit_status(f"添加工作日志失败: {result_obj['error']}", True, True)
+                else:
+                    worklog_id = result_obj.get("id", "")
+                    issue_url = f"{self._get_jira_server()}/browse/{issue_key}"
+
+                    await event_emitter.emit_message(f"""
+### 📋 工作日志已添加
+
+成功添加工作日志到问题 [{issue_key}]({issue_url})
+**工作日志 ID:** {worklog_id}
+**花费时间:** {time_spent}
+**描述:** {description if description else "无"}
+""")
+                    await event_emitter.emit_status(f"工作日志已添加到问题 {issue_key}", True)
+
+            return result
+
+        except Exception as e:
+            error_message = str(e)
+            if event_emitter:
+                await event_emitter.emit_status(f"添加工作日志失败: {error_message}", True, True)
+
+            error_response = {"error": f"添加工作日志失败: {error_message}"}
+            return json.dumps(error_response, ensure_ascii=False)
+
+    async def jira_update_worklog(self, worklog_id: str, time_spent: str = None, description: str = None, __user__: dict = {}, __event_emitter__: Callable[[dict], Awaitable[None]] = None) -> str:
+        """
+        更新工作日志
+
+        :param worklog_id: 工作日志 ID
+        :param time_spent: 新的花费时间，格式如 "2h" 或 "30m" (可选)
+        :param description: 新的描述 (可选)
+        :return: 更新的工作日志信息 JSON 字符串
+        """
+        event_emitter = None
+        if __event_emitter__:
+            event_emitter = EventEmitter(__event_emitter__)
+            await event_emitter.emit_status(f"正在更新工作日志 {worklog_id}", False)
+
+        try:
+            data = {}
+            if time_spent:
+                data["timeSpent"] = time_spent
+            if description:
+                data["description"] = description
+
+            if not data:
+                error_message = "未提供任何要更新的字段"
+                if event_emitter:
+                    await event_emitter.emit_status(error_message, True, True)
+                return json.dumps({"error": error_message}, ensure_ascii=False)
+
+            result = self._make_jira_request("PUT", f"/issue/worklog/{worklog_id}", __user__, data=data)
+
+            if event_emitter:
+                result_obj = json.loads(result)
+                if "error" in result_obj:
+                    await event_emitter.emit_status(f"更新工作日志失败: {result_obj['error']}", True, True)
+                else:
+                    issue_key = result_obj.get("issueId", "")
+                    issue_url = f"{self._get_jira_server()}/browse/{issue_key}"
+
+                    await event_emitter.emit_message(f"""
+### 📋 工作日志已更新
+
+工作日志 {worklog_id} 已成功更新
+**问题:** [{issue_key}]({issue_url})
+**新的花费时间:** {time_spent if time_spent else "无变化"}
+**新的描述:** {description if description else "无变化"}
+""")
+                    await event_emitter.emit_status(f"工作日志 {worklog_id} 更新成功", True)
+
+            return result
+
+        except Exception as e:
+            error_message = str(e)
+            if event_emitter:
+                await event_emitter.emit_status(f"更新工作日志失败: {error_message}", True, True)
+
+            error_response = {"error": f"更新工作日志失败: {error_message}"}
+            return json.dumps(error_response, ensure_ascii=False)
