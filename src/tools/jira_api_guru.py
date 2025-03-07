@@ -1115,4 +1115,487 @@ class Tools:
 
             error_response = {"error": f"搜索 Jira 问题失败: {error_message}"}
             return json.dumps(error_response, ensure_ascii=False)
-    # 剩余方法的模式类似，都需要添加 __event_emitter__ 参数并实现相应的事件通知逻辑
+    async def jira_get_issue_types(self, __user__: dict = {}, __event_emitter__: Callable[[dict], Awaitable[None]] = None) -> str:
+        """
+        获取所有问题类型
+
+        :return: 问题类型列表 JSON 字符串
+        """
+        event_emitter = None
+        if __event_emitter__:
+            event_emitter = EventEmitter(__event_emitter__)
+            await event_emitter.emit_status("正在获取问题类型列表", False)
+
+        try:
+            result = self._make_jira_request("GET", "/issuetype", __user__)
+
+            if event_emitter:
+                result_obj = json.loads(result)
+                if "error" in result_obj:
+                    await event_emitter.emit_status(f"获取问题类型列表失败: {result_obj['error']}", True, True)
+                else:
+                    issue_types = result_obj
+                    if not issue_types:
+                        await event_emitter.emit_message("未找到任何问题类型")
+                    else:
+                        # 准备表格数据
+                        rows = []
+                        for issue_type in issue_types:
+                            id = issue_type.get("id", "")
+                            name = issue_type.get("name", "")
+                            description = issue_type.get("description", "无描述")
+
+                            rows.append([id, name, description])
+
+                        await event_emitter.emit_table(
+                            ["ID", "名称", "描述"],
+                            rows,
+                            "Jira 问题类型列表"
+                        )
+
+                    await event_emitter.emit_status("问题类型列表获取完成", True)
+
+            return result
+
+        except Exception as e:
+            error_message = str(e)
+            if event_emitter:
+                await event_emitter.emit_status(f"获取问题类型列表失败: {error_message}", True, True)
+
+            error_response = {"error": f"获取问题类型失败: {error_message}"}
+            return json.dumps(error_response, ensure_ascii=False)
+
+    async def jira_get_issue_changelog(self, issue_key: str, start_at: int = 0, max_results: int = 50, __user__: dict = {}, __event_emitter__: Callable[[dict], Awaitable[None]] = None) -> str:
+        """
+        获取问题的变更历史记录
+
+        :param issue_key: 问题的键值，例如 PROJECT-123
+        :param start_at: 起始索引
+        :param max_results: 最大结果数
+        :return: 变更历史记录 JSON 字符串
+        """
+        event_emitter = None
+        if __event_emitter__:
+            event_emitter = EventEmitter(__event_emitter__)
+            await event_emitter.emit_status(f"正在获取问题 {issue_key} 的变更历史", False)
+
+        try:
+            params = {
+                "startAt": start_at,
+                "maxResults": max_results,
+                "expand": "changelog"
+            }
+
+            result = self._make_jira_request("GET", f"/issue/{issue_key}", __user__, params=params)
+
+            if event_emitter:
+                result_obj = json.loads(result)
+                if "error" in result_obj:
+                    await event_emitter.emit_status(f"获取变更历史失败: {result_obj['error']}", True, True)
+                else:
+                    changelog = result_obj.get("changelog", {}).get("histories", [])
+                    issue_url = f"{self._get_jira_server()}/browse/{issue_key}"
+
+                    if not changelog:
+                        await event_emitter.emit_message(f"""
+### 📝 问题变更历史
+
+问题 [{issue_key}]({issue_url}) 没有变更历史记录
+""")
+                    else:
+                        # 提取每个变更的关键信息
+                        change_log_items = []
+                        for history in changelog:
+                            author = history.get("author", {}).get("displayName", "未知用户")
+                            created = history.get("created", "")
+                            items = history.get("items", [])
+
+                            changes = []
+                            for item in items:
+                                field = item.get("field", "")
+                                from_value = item.get("fromString", "")
+                                to_value = item.get("toString", "")
+                                changes.append(f"{field}: {from_value} → {to_value}")
+
+                            change_log_items.append({
+                                "author": author,
+                                "created": created,
+                                "changes": changes
+                            })
+
+                        # 格式化变更历史记录
+                        history_text = ""
+                        for i, change in enumerate(change_log_items, 1):
+                            history_text += f"""
+#### 变更 {i}/{len(change_log_items)}
+**操作人:** {change['author']}
+**时间:** {change['created']}
+**变更内容:**
+"""
+                            for change_item in change["changes"]:
+                                history_text += f"- {change_item}\n"
+
+                            history_text += "\n---\n"
+
+                        await event_emitter.emit_message(f"""
+### 📝 问题变更历史
+
+问题 [{issue_key}]({issue_url}) 的变更历史 (共 {len(change_log_items)} 条记录):
+{history_text}
+""")
+
+                    await event_emitter.emit_status(f"已获取问题 {issue_key} 的变更历史", True)
+
+            return result
+
+        except Exception as e:
+            error_message = str(e)
+            if event_emitter:
+                await event_emitter.emit_status(f"获取变更历史失败: {error_message}", True, True)
+
+            error_response = {"error": f"获取问题变更历史失败: {error_message}"}
+            return json.dumps(error_response, ensure_ascii=False)
+
+    async def jira_get_issue_links(self, issue_key: str, __user__: dict = {}, __event_emitter__: Callable[[dict], Awaitable[None]] = None) -> str:
+        """
+        获取问题的链接关系
+
+        :param issue_key: 问题的键值，例如 PROJECT-123
+        :return: 问题链接关系 JSON 字符串
+        """
+        event_emitter = None
+        if __event_emitter__:
+            event_emitter = EventEmitter(__event_emitter__)
+            await event_emitter.emit_status(f"正在获取问题 {issue_key} 的链接关系", False)
+
+        try:
+            # 通过获取问题详情来获取问题链接
+            result = self._make_jira_request("GET", f"/issue/{issue_key}?fields=issuelinks", __user__)
+
+            if event_emitter:
+                result_obj = json.loads(result)
+                if "error" in result_obj:
+                    await event_emitter.emit_status(f"获取问题链接失败: {result_obj['error']}", True, True)
+                else:
+                    links = result_obj.get("fields", {}).get("issuelinks", [])
+                    issue_url = f"{self._get_jira_server()}/browse/{issue_key}"
+
+                    if not links:
+                        await event_emitter.emit_message(f"""
+### 🔗 问题链接
+
+问题 [{issue_key}]({issue_url}) 没有链接到其他问题
+""")
+                    else:
+                        # 准备表格数据
+                        rows = []
+                        for link in links:
+                            link_type = link.get("type", {}).get("name", "未知关系")
+                            inward_desc = link.get("type", {}).get("inward", "")
+                            outward_desc = link.get("type", {}).get("outward", "")
+
+                            if "inwardIssue" in link:
+                                direction = "入向"
+                                related_issue = link["inwardIssue"]
+                                relationship = inward_desc
+                            elif "outwardIssue" in link:
+                                direction = "出向"
+                                related_issue = link["outwardIssue"]
+                                relationship = outward_desc
+                            else:
+                                continue
+
+                            related_key = related_issue.get("key", "")
+                            related_summary = related_issue.get("fields", {}).get("summary", "")
+                            related_status = related_issue.get("fields", {}).get("status", {}).get("name", "")
+                            related_url = f"{self._get_jira_server()}/browse/{related_key}"
+
+                            link_text = f"[{related_key}]({related_url})"
+                            rows.append([link_type, relationship, link_text, related_summary, related_status])
+
+                        await event_emitter.emit_table(
+                            ["链接类型", "关系", "关联问题", "标题", "状态"],
+                            rows,
+                            f"问题 {issue_key} 的链接关系"
+                        )
+
+                    await event_emitter.emit_status(f"已获取问题 {issue_key} 的链接关系", True)
+
+            return result
+
+        except Exception as e:
+            error_message = str(e)
+            if event_emitter:
+                await event_emitter.emit_status(f"获取问题链接失败: {error_message}", True, True)
+
+            error_response = {"error": f"获取问题链接失败: {error_message}"}
+            return json.dumps(error_response, ensure_ascii=False)
+
+    async def jira_create_issue_link(self, link_type: str, inward_issue: str, outward_issue: str, comment: str = None, __user__: dict = {}, __event_emitter__: Callable[[dict], Awaitable[None]] = None) -> str:
+        """
+        创建问题链接关系
+
+        :param link_type: 链接类型名称，例如 "Blocks", "Relates"
+        :param inward_issue: 入向问题键值，例如 PROJECT-123
+        :param outward_issue: 出向问题键值，例如 PROJECT-456
+        :param comment: 可选的评论内容
+        :return: 创建链接操作结果 JSON 字符串
+        """
+        event_emitter = None
+        if __event_emitter__:
+            event_emitter = EventEmitter(__event_emitter__)
+            await event_emitter.emit_status(f"正在创建问题 {outward_issue} 到 {inward_issue} 的链接关系", False)
+
+        try:
+            data = {
+                "type": {
+                    "name": link_type
+                },
+                "inwardIssue": {
+                    "key": inward_issue
+                },
+                "outwardIssue": {
+                    "key": outward_issue
+                }
+            }
+
+            if comment:
+                data["comment"] = {
+                    "body": {
+                        "type": "doc",
+                        "version": 1,
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": comment
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+
+            result = self._make_jira_request("POST", "/issueLink", __user__, data=data)
+
+            if event_emitter:
+                result_obj = json.loads(result)
+                if "error" in result_obj:
+                    await event_emitter.emit_status(f"创建问题链接失败: {result_obj['error']}", True, True)
+                else:
+                    inward_url = f"{self._get_jira_server()}/browse/{inward_issue}"
+                    outward_url = f"{self._get_jira_server()}/browse/{outward_issue}"
+
+                    await event_emitter.emit_message(f"""
+### 🔗 问题链接创建成功
+
+已创建问题链接:
+**链接类型:** {link_type}
+**从问题:** [{outward_issue}]({outward_url})
+**到问题:** [{inward_issue}]({inward_url})
+""")
+                    if comment:
+                        await event_emitter.emit_message(f"**添加的评论:** {comment}")
+
+                    await event_emitter.emit_status("问题链接创建成功", True)
+
+            return result
+
+        except Exception as e:
+            error_message = str(e)
+            if event_emitter:
+                await event_emitter.emit_status(f"创建问题链接失败: {error_message}", True, True)
+
+            error_response = {"error": f"创建问题链接失败: {error_message}"}
+            return json.dumps(error_response, ensure_ascii=False)
+
+    async def jira_delete_issue_link(self, link_id: str, __user__: dict = {}, __event_emitter__: Callable[[dict], Awaitable[None]] = None) -> str:
+        """
+        删除问题链接关系
+
+        :param link_id: 链接ID
+        :return: 删除链接操作结果 JSON 字符串
+        """
+        event_emitter = None
+        if __event_emitter__:
+            event_emitter = EventEmitter(__event_emitter__)
+            await event_emitter.emit_status(f"正在删除问题链接 {link_id}", False)
+
+        try:
+            result = self._make_jira_request("DELETE", f"/issueLink/{link_id}", __user__)
+
+            if event_emitter:
+                result_obj = json.loads(result)
+                if "error" in result_obj:
+                    await event_emitter.emit_status(f"删除问题链接失败: {result_obj['error']}", True, True)
+                else:
+                    await event_emitter.emit_message(f"""
+### 🔗 问题链接删除成功
+
+链接ID: {link_id} 已成功删除
+""")
+                    await event_emitter.emit_status("问题链接删除成功", True)
+
+            return result
+
+        except Exception as e:
+            error_message = str(e)
+            if event_emitter:
+                await event_emitter.emit_status(f"删除问题链接失败: {error_message}", True, True)
+
+            error_response = {"error": f"删除问题链接失败: {error_message}"}
+            return json.dumps(error_response, ensure_ascii=False)
+
+    async def jira_get_priorities(self, __user__: dict = {}, __event_emitter__: Callable[[dict], Awaitable[None]] = None) -> str:
+        """
+        获取所有问题优先级
+
+        :return: 优先级列表 JSON 字符串
+        """
+        event_emitter = None
+        if __event_emitter__:
+            event_emitter = EventEmitter(__event_emitter__)
+            await event_emitter.emit_status("正在获取问题优先级列表", False)
+
+        try:
+            result = self._make_jira_request("GET", "/priority", __user__)
+
+            if event_emitter:
+                result_obj = json.loads(result)
+                if "error" in result_obj:
+                    await event_emitter.emit_status(f"获取优先级列表失败: {result_obj['error']}", True, True)
+                else:
+                    priorities = result_obj
+                    if not priorities:
+                        await event_emitter.emit_message("未找到任何优先级")
+                    else:
+                        # 准备表格数据
+                        rows = []
+                        for priority in priorities:
+                            id = priority.get("id", "")
+                            name = priority.get("name", "")
+                            description = priority.get("description", "无描述")
+                            icon_url = priority.get("iconUrl", "")
+
+                            rows.append([id, name, description])
+
+                        await event_emitter.emit_table(
+                            ["ID", "名称", "描述"],
+                            rows,
+                            "Jira 问题优先级列表"
+                        )
+
+                    await event_emitter.emit_status("优先级列表获取完成", True)
+
+            return result
+
+        except Exception as e:
+            error_message = str(e)
+            if event_emitter:
+                await event_emitter.emit_status(f"获取优先级列表失败: {error_message}", True, True)
+
+            error_response = {"error": f"获取问题优先级失败: {error_message}"}
+            return json.dumps(error_response, ensure_ascii=False)
+
+    async def jira_get_statuses(self, __user__: dict = {}, __event_emitter__: Callable[[dict], Awaitable[None]] = None) -> str:
+        """
+        获取所有问题状态
+
+        :return: 状态列表 JSON 字符串
+        """
+        event_emitter = None
+        if __event_emitter__:
+            event_emitter = EventEmitter(__event_emitter__)
+            await event_emitter.emit_status("正在获取问题状态列表", False)
+
+        try:
+            result = self._make_jira_request("GET", "/status", __user__)
+
+            if event_emitter:
+                result_obj = json.loads(result)
+                if "error" in result_obj:
+                    await event_emitter.emit_status(f"获取状态列表失败: {result_obj['error']}", True, True)
+                else:
+                    statuses = result_obj
+                    if not statuses:
+                        await event_emitter.emit_message("未找到任何状态")
+                    else:
+                        # 准备表格数据
+                        rows = []
+                        for status in statuses:
+                            id = status.get("id", "")
+                            name = status.get("name", "")
+                            description = status.get("description", "无描述")
+                            category = status.get("statusCategory", {}).get("name", "")
+
+                            rows.append([id, name, category, description])
+
+                        await event_emitter.emit_table(
+                            ["ID", "名称", "类别", "描述"],
+                            rows,
+                            "Jira 问题状态列表"
+                        )
+
+                    await event_emitter.emit_status("状态列表获取完成", True)
+
+            return result
+
+        except Exception as e:
+            error_message = str(e)
+            if event_emitter:
+                await event_emitter.emit_status(f"获取状态列表失败: {error_message}", True, True)
+
+            error_response = {"error": f"获取问题状态失败: {error_message}"}
+            return json.dumps(error_response, ensure_ascii=False)
+
+    async def jira_get_resolutions(self, __user__: dict = {}, __event_emitter__: Callable[[dict], Awaitable[None]] = None) -> str:
+        """
+        获取所有问题解决结果
+
+        :return: 解决结果列表 JSON 字符串
+        """
+        event_emitter = None
+        if __event_emitter__:
+            event_emitter = EventEmitter(__event_emitter__)
+            await event_emitter.emit_status("正在获取问题解决结果列表", False)
+
+        try:
+            result = self._make_jira_request("GET", "/resolution", __user__)
+
+            if event_emitter:
+                result_obj = json.loads(result)
+                if "error" in result_obj:
+                    await event_emitter.emit_status(f"获取解决结果列表失败: {result_obj['error']}", True, True)
+                else:
+                    resolutions = result_obj
+                    if not resolutions:
+                        await event_emitter.emit_message("未找到任何解决结果")
+                    else:
+                        # 准备表格数据
+                        rows = []
+                        for resolution in resolutions:
+                            id = resolution.get("id", "")
+                            name = resolution.get("name", "")
+                            description = resolution.get("description", "无描述")
+
+                            rows.append([id, name, description])
+
+                        await event_emitter.emit_table(
+                            ["ID", "名称", "描述"],
+                            rows,
+                            "Jira 问题解决结果列表"
+                        )
+
+                    await event_emitter.emit_status("解决结果列表获取完成", True)
+
+            return result
+
+        except Exception as e:
+            error_message = str(e)
+            if event_emitter:
+                await event_emitter.emit_status(f"获取解决结果列表失败: {error_message}", True, True)
+
+            error_response = {"error": f"获取问题解决结果失败: {error_message}"}
+            return json.dumps(error_response, ensure_ascii=False)
