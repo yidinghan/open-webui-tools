@@ -224,7 +224,7 @@ class Tools:
             else:
                 raise ValueError(f"不支持的请求方法: {method}")
 
-            if response.status_code != 200:
+            if response.status_code >= 400:
                 error_message = response.text
                 return json.dumps({"error": f"请求失败，状态码: {response.status_code}, 错误信息: {error_message}, 请求 URL: {url}"}, ensure_ascii=False)
 
