@@ -72,31 +72,14 @@ class Pipeline:
         "n", "logprobs", "echo", "best_of", "logit_bias", "user"
     }
     
-    # 预定义模型列表
-    MODELS = [
-        # OpenAI
+    # 备用模型列表（API 不可用时使用）
+    FALLBACK_MODELS = [
         {"id": "GPT-4o", "name": "GPT-4o"},
-        {"id": "GPT-4-Turbo", "name": "GPT-4 Turbo"},
         {"id": "o1", "name": "o1 (Reasoning)"},
-        {"id": "o1-mini", "name": "o1-mini (Reasoning)"},
-        {"id": "o3-mini", "name": "o3-mini (Reasoning)"},
-        # Anthropic
         {"id": "Claude-3.5-Sonnet", "name": "Claude 3.5 Sonnet"},
         {"id": "Claude-3-Opus", "name": "Claude 3 Opus"},
-        {"id": "Claude-3-Sonnet", "name": "Claude 3 Sonnet"},
-        {"id": "Claude-3-Haiku", "name": "Claude 3 Haiku"},
-        # Google
         {"id": "Gemini-2.5-Pro", "name": "Gemini 2.5 Pro"},
-        {"id": "Gemini-Pro", "name": "Gemini Pro"},
-        # Meta
         {"id": "Llama-3.1-405B", "name": "Llama 3.1 405B"},
-        # Video/Image
-        {"id": "Sora-2", "name": "Sora 2 (Video)"},
-        {"id": "Runway-Gen-4-Turbo", "name": "Runway Gen4 (Video)"},
-        {"id": "DALL-E-3", "name": "DALL-E 3 (Image)"},
-        # Others
-        {"id": "Grok-2", "name": "Grok 2"},
-        {"id": "DeepSeek-R1", "name": "DeepSeek R1"},
     ]
 
     def __init__(self):
@@ -104,16 +87,56 @@ class Pipeline:
         self.id = "poe"
         self.name = "Poe"
         self.valves = self.Valves()
-        self.pipelines = self.MODELS
+        self.pipelines = self.FALLBACK_MODELS  # 初始使用备用列表
 
     async def on_startup(self):
+        """启动时获取模型列表"""
+        await self._refresh_models()
         logger.info(f"[{self.name}] Pipeline started with {len(self.pipelines)} models")
 
     async def on_shutdown(self):
         logger.info(f"[{self.name}] Pipeline shutdown")
 
     async def on_valves_updated(self):
-        logger.info(f"[{self.name}] Valves updated")
+        """配置更新时刷新模型列表"""
+        await self._refresh_models()
+        logger.info(f"[{self.name}] Valves updated, models refreshed")
+
+    async def _refresh_models(self):
+        """从 Poe API 动态获取模型列表"""
+        if not self.valves.POE_API_KEY:
+            logger.warning(f"[{self.name}] No API key, using fallback models")
+            self.pipelines = self.FALLBACK_MODELS
+            return
+        
+        try:
+            response = requests.get(
+                f"{self.valves.POE_API_BASE_URL}/models",
+                headers={"Authorization": f"Bearer {self.valves.POE_API_KEY}"},
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                models = []
+                for model in data.get("data", []):
+                    model_id = model.get("id", "")
+                    if model_id:
+                        models.append({
+                            "id": model_id,
+                            "name": model.get("name", model_id)
+                        })
+                
+                if models:
+                    self.pipelines = models
+                    logger.info(f"[{self.name}] Fetched {len(models)} models from API")
+                    return
+            
+            logger.warning(f"[{self.name}] Failed to fetch models: HTTP {response.status_code}")
+        except Exception as e:
+            logger.warning(f"[{self.name}] Failed to fetch models: {e}")
+        
+        self.pipelines = self.FALLBACK_MODELS
 
     def _get_api_key(self, __user__: dict = None) -> str:
         """获取 API Key（用户级优先）"""
