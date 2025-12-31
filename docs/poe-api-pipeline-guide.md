@@ -2,6 +2,14 @@
 
 > 支持 **extra_body 自定义参数** 的 Poe API Pipeline，实现对推理模型、图像/视频生成等高级功能的完整支持。
 
+## 支持的模型
+
+- **OpenAI**: GPT-5.2, GPT-5.2-Pro, GPT-5.2-Instant
+- **Anthropic**: Claude-Sonnet-4.5, Claude-Opus-4.5, Claude-Opus-4.1, Claude-Haiku-4.5
+- **Google**: Gemini-3-Pro, Gemini-3-Flash
+- **xAI**: Grok-4
+- **Others**: GLM-4.7, Minimax-M2.1
+
 ## 核心需求：extra_body 参数
 
 ### 为什么需要 extra_body？
@@ -117,12 +125,13 @@ Pipeline 作为 Manifold 类型，暴露多个模型：
 class Pipeline:
     def __init__(self):
         self.type = "manifold"
-        self.id = "poe"
-        self.name = "Poe"
+        self.id = "poeapipp"
+        self.name = "poeapipp/"
         self.pipelines = [
-            {"id": "GPT-4o", "name": "GPT-4o"},
-            {"id": "o1", "name": "o1 (Reasoning)"},
-            {"id": "Claude-3.5-Sonnet", "name": "Claude 3.5 Sonnet"},
+            {"id": "GPT-5.2", "name": "GPT-5.2"},
+            {"id": "Claude-Sonnet-4.5", "name": "Claude-Sonnet-4.5"},
+            {"id": "Gemini-3-Pro", "name": "Gemini-3-Pro"},
+            {"id": "Grok-4", "name": "Grok-4"},
             # ...
         ]
 ```
@@ -160,7 +169,7 @@ curl -X POST http://localhost:9099/v1/chat/completions \
   -H "Authorization: Bearer 0p3n-w3bu!" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "poe.o1",
+    "model": "poeapipp.o1",
     "messages": [{"role": "user", "content": "What is 25 * 47?"}],
     "stream": false,
     "reasoning_effort": "high"
@@ -171,7 +180,7 @@ curl -X POST http://localhost:9099/v1/chat/completions \
   -H "Authorization: Bearer 0p3n-w3bu!" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "poe.Sora-2",
+    "model": "poeapipp.Sora-2",
     "messages": [{"role": "user", "content": "A sunset over ocean"}],
     "stream": false,
     "extra_body": {"aspect": "1920x1080", "video_length": 5}

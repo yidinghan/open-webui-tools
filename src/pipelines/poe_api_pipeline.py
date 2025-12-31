@@ -43,7 +43,7 @@ class Pipeline:
             description="Poe API 基础 URL"
         )
         DEFAULT_MODEL: str = Field(
-            default="Claude-3.5-Sonnet",
+            default="Claude-Sonnet-4.5",
             description="默认模型"
         )
         REQUEST_TIMEOUT: int = Field(
@@ -75,12 +75,23 @@ class Pipeline:
     
     # 备用模型列表（API 不可用时使用）
     FALLBACK_MODELS = [
-        {"id": "GPT-4o", "name": "GPT-4o"},
-        {"id": "o1", "name": "o1 (Reasoning)"},
-        {"id": "Claude-3.5-Sonnet", "name": "Claude 3.5 Sonnet"},
-        {"id": "Claude-3-Opus", "name": "Claude 3 Opus"},
-        {"id": "Gemini-2.5-Pro", "name": "Gemini 2.5 Pro"},
-        {"id": "Llama-3.1-405B", "name": "Llama 3.1 405B"},
+        # OpenAI
+        {"id": "GPT-5.2", "name": "GPT-5.2"},
+        {"id": "GPT-5.2-Pro", "name": "GPT-5.2-Pro"},
+        {"id": "GPT-5.2-Instant", "name": "GPT-5.2-Instant"},
+        # Anthropic
+        {"id": "Claude-Sonnet-4.5", "name": "Claude-Sonnet-4.5"},
+        {"id": "Claude-Opus-4.5", "name": "Claude-Opus-4.5"},
+        {"id": "Claude-Opus-4.1", "name": "Claude-Opus-4.1"},
+        {"id": "Claude-Haiku-4.5", "name": "Claude-Haiku-4.5"},
+        # Google
+        {"id": "Gemini-3-Pro", "name": "Gemini-3-Pro"},
+        {"id": "Gemini-3-Flash", "name": "Gemini-3-Flash"},
+        # xAI
+        {"id": "Grok-4", "name": "Grok-4"},
+        # Others
+        {"id": "GLM-4.7", "name": "GLM-4.7"},
+        {"id": "Minimax-M2.1", "name": "Minimax-M2.1"},
     ]
 
     def __init__(self):

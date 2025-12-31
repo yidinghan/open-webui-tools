@@ -10,8 +10,13 @@ Open WebUI 工具和 Pipeline 集合，提供增强 LLM 应用的扩展功能。
 
 通过 Poe API 访问多种 AI 模型，支持 `extra_body` 自定义参数透传。
 
+**GitHub Raw 链接（可直接在 Open WebUI 中安装）：**
+```
+https://raw.githubusercontent.com/yidinghan/open-webui-tools/main/src/pipelines/poe_api_pipeline.py
+```
+
 **特性：**
-- 支持 GPT-4o、Claude、Gemini、Llama 等多种模型
+- 支持 GPT-5.2、Claude-Sonnet-4.5、Claude-Opus-4.5、Gemini-3-Pro、Grok-4 等最新模型
 - 完整支持 `reasoning_effort`、`thinking_budget` 等推理参数
 - 支持 `aspect`、`video_length` 等多媒体生成参数
 - 动态模型列表（从 Poe API 自动获取）
