@@ -1,9 +1,9 @@
 """
 title: Poe API Pipeline with extra_body Support
 description: 支持 extra_body 自定义参数的 Poe API Pipeline，完整支持推理模型、图像/视频生成等高级功能
-author: Your Name
-author_url: https://github.com/your-username
-version: 2.0.0
+author: yidinghan
+author_url: https://github.com/yidinghan
+version: 1.0.0
 license: MIT
 requirements: requests, pydantic
 """
