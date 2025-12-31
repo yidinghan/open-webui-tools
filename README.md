@@ -1,52 +1,64 @@
-# OpenWebUI Tools
+# Open WebUI Tools
 
-这是OpenWebUI的工具集合项目，提供了一系列用于增强LLM应用的工具。
+Open WebUI 工具和 Pipeline 集合，提供增强 LLM 应用的扩展功能。
+
+## 功能
+
+### Pipelines
+
+#### [Poe API Pipeline](src/pipelines/poe_api_pipeline.py)
+
+通过 Poe API 访问多种 AI 模型，支持 `extra_body` 自定义参数透传。
+
+**特性：**
+- 支持 GPT-4o、Claude、Gemini、Llama 等多种模型
+- 完整支持 `reasoning_effort`、`thinking_budget` 等推理参数
+- 支持 `aspect`、`video_length` 等多媒体生成参数
+- 动态模型列表（从 Poe API 自动获取）
+- 流式/非流式响应
+
+**快速开始：**
+
+```bash
+# 复制到 pipelines 目录
+cp src/pipelines/poe_api_pipeline.py /path/to/pipelines/
+
+# 在 Open WebUI 中配置 POE_API_KEY
+```
+
+详细文档: [docs/poe-api-pipeline-guide.md](docs/poe-api-pipeline-guide.md)
+
+### Tools
+
+#### [Jira API Integration](src/tools/jira_api_guru.py)
+
+全功能 Jira API 集成工具，支持问题管理、项目查询、状态变更等。
 
 ## 项目结构
 
 ```
 .
-├── src/                # 源代码目录
-│   ├── tools/         # LLM工具实现
+├── src/
+│   ├── pipelines/     # Open WebUI Pipelines
+│   ├── tools/         # Open WebUI Tools
 │   ├── utils/         # 通用工具函数
-│   └── config/        # 配置相关代码
-├── tests/             # 测试文件目录
-├── docs/              # 文档目录
-└── examples/          # 示例代码目录
+│   └── config/        # 配置相关
+├── tests/             # 测试文件
+├── docs/              # 文档
+└── examples/          # 示例代码
 ```
 
-## 开发环境设置
+## 开发
 
-1. 克隆仓库
 ```bash
-git clone [repository-url]
+# 克隆仓库
+git clone https://github.com/yidinghan/open-webui-tools.git
 cd open-webui-tools
+
+# 安装依赖
+pip install requests pydantic
 ```
-
-2. 创建虚拟环境
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 或
-.\venv\Scripts\activate  # Windows
-```
-
-3. 安装依赖
-```bash
-pip install -r requirements.txt
-```
-
-## 使用说明
-
-待补充
-
-## 贡献指南
-
-1. Fork 项目
-2. 创建特性分支
-3. 提交改动
-4. 发起 Pull Request
 
 ## 许可证
 
-[License 信息]
+MIT License
