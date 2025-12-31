@@ -147,10 +147,11 @@ class Pipeline:
         return self.valves.POE_API_KEY
 
     def _get_model_id(self, body: dict) -> str:
-        """提取模型 ID，移除 pipeline 前缀"""
+        """提取模型 ID，移除所有 pipeline 前缀（如 pp.poe.gpt-5.2 -> gpt-5.2）"""
         model = body.get("model", "")
         if "." in model:
-            model = model.split(".", 1)[1]
+            # 取最后一个点后面的部分作为模型 ID
+            model = model.rsplit(".", 1)[1]
         return model or self.valves.DEFAULT_MODEL
 
     def _build_request_body(self, body: dict, model_id: str) -> dict:
