@@ -8,10 +8,11 @@ license: MIT
 requirements: requests, pydantic
 """
 
+import os
 import json
 import time
 import logging
-from typing import List, Dict, Any, Optional, Union, Generator
+from typing import List, Dict, Any, Optional, Union, Generator, Iterator
 
 import requests
 from pydantic import BaseModel, Field
@@ -85,8 +86,10 @@ class Pipeline:
     def __init__(self):
         self.type = "manifold"
         self.id = "poe"
-        self.name = "Poe"
-        self.valves = self.Valves()
+        self.name = "poe/"
+        self.valves = self.Valves(
+            **{"POE_API_KEY": os.getenv("POE_API_KEY", "")}
+        )
         self.pipelines = self.FALLBACK_MODELS  # 初始使用备用列表
 
     async def on_startup(self):
@@ -138,23 +141,11 @@ class Pipeline:
         
         self.pipelines = self.FALLBACK_MODELS
 
-    def _get_api_key(self, __user__: dict = None) -> str:
-        """获取 API Key（用户级优先）"""
-        if __user__ and "valves" in __user__:
-            user_key = __user__["valves"].get("POE_API_KEY", "")
-            if user_key:
-                return user_key
+    def _get_api_key(self) -> str:
+        """获取 API Key"""
         return self.valves.POE_API_KEY
 
-    def _get_model_id(self, body: dict) -> str:
-        """提取模型 ID，移除所有 pipeline 前缀（如 pp.poe.gpt-5.2 -> gpt-5.2）"""
-        model = body.get("model", "")
-        if "." in model:
-            # 取最后一个点后面的部分作为模型 ID
-            model = model.rsplit(".", 1)[1]
-        return model or self.valves.DEFAULT_MODEL
-
-    def _build_request_body(self, body: dict, model_id: str) -> dict:
+    def _build_request_body(self, model_id: str, messages: List[dict], body: dict) -> dict:
         """
         构建请求体，核心功能：识别并透传 extra_body 参数
         
@@ -165,7 +156,7 @@ class Pipeline:
         # 基础请求体
         request_body = {
             "model": model_id,
-            "messages": body.get("messages", []),
+            "messages": messages,
             "stream": body.get("stream", True)
         }
         
@@ -282,12 +273,19 @@ class Pipeline:
 
     def pipe(
         self,
-        body: dict,
-        __user__: dict = None,
-        __metadata__: dict = None
-    ) -> Union[str, Generator[str, None, None]]:
+        user_message: str,
+        model_id: str,
+        messages: List[dict],
+        body: dict
+    ) -> Union[str, Generator, Iterator]:
         """
         核心处理方法
+        
+        Args:
+            user_message: 用户最新消息
+            model_id: 模型 ID（已由框架处理好，无前缀）
+            messages: 完整消息列表
+            body: 请求体，包含 stream、temperature 等参数
         
         支持的 extra_body 参数示例：
         - reasoning_effort: "low" | "medium" | "high" (o1/o3 模型)
@@ -297,15 +295,12 @@ class Pipeline:
         - style: str (图像模型)
         """
         # 验证 API Key
-        api_key = self._get_api_key(__user__)
+        api_key = self._get_api_key()
         if not api_key:
             return "❌ **错误**: 未配置 Poe API Key"
         
-        # 提取模型 ID
-        model_id = self._get_model_id(body)
-        
         # 构建请求体（包含 extra_body 处理）
-        request_body = self._build_request_body(body, model_id)
+        request_body = self._build_request_body(model_id, messages, body)
         is_streaming = request_body.get("stream", True)
         
         # 多媒体模型建议禁用流式
@@ -325,7 +320,7 @@ class Pipeline:
         if self.valves.DEBUG_MODE:
             # 脱敏日志
             safe_body = {k: v for k, v in request_body.items() if k != "messages"}
-            safe_body["messages"] = f"[{len(request_body.get('messages', []))} messages]"
+            safe_body["messages"] = f"[{len(messages)} messages]"
             logger.debug(f"[{self.name}] Request: {json.dumps(safe_body, ensure_ascii=False)}")
         
         try:
