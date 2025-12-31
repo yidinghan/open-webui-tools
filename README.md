@@ -1,5 +1,7 @@
 # Open WebUI Tools
 
+简体中文 | [English](docs/i18n/README.en.md) | [日本語](docs/i18n/README.ja.md) | [Français](docs/i18n/README.fr.md) | [Español](docs/i18n/README.es.md) | [Deutsch](docs/i18n/README.de.md) | [Português](docs/i18n/README.pt-BR.md) | [Русский](docs/i18n/README.ru.md)
+
 Open WebUI 工具和 Pipeline 集合，提供增强 LLM 应用的扩展功能。
 
 ## 功能
