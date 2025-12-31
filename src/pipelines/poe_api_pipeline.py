@@ -85,8 +85,8 @@ class Pipeline:
 
     def __init__(self):
         self.type = "manifold"
-        self.id = "poe"
-        self.name = "poe/"
+        self.id = "poeapipp"
+        self.name = "poeapipp/"
         self.valves = self.Valves(
             **{"POE_API_KEY": os.getenv("POE_API_KEY", "")}
         )
