@@ -156,20 +156,81 @@ class Pipeline:
         """获取 API Key"""
         return self.valves.POE_API_KEY
 
+    # 模型参数解析配置
+    # GPT-5.2 reasoning effort 枚举值: none, minimal, low, medium, high, xhigh
+    GPT52_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}
+    # Gemini-3-Pro thinking level 枚举值: low, high
+    GEMINI3_THINKING_LEVELS = {"low", "high"}
+
+    def _parse_model_params(self, model_id: str) -> tuple[str, dict]:
+        """
+        解析模型 ID 中嵌入的参数
+        
+        支持格式:
+        - GPT-5.2-{effort}: 如 GPT-5.2-high, GPT-5.2-xhigh
+        - Gemini-3-Pro-{level}: 如 Gemini-3-Pro-high, Gemini-3-Pro-low
+        - Gemini-3-Pro-{budget}: 如 Gemini-3-Pro-8192 (数字表示 thinking_budget)
+        
+        Returns:
+            tuple: (实际模型ID, 额外参数字典)
+        """
+        extra_params = {}
+        actual_model = model_id
+        
+        # 处理 GPT-5.2 系列: GPT-5.2-{effort}
+        # Poe API 文档: reasoning_effort 通过 extra_body 传递
+        if model_id.upper().startswith("GPT-5.2-"):
+            parts = model_id.rsplit("-", 1)
+            if len(parts) == 2:
+                suffix = parts[1].lower()
+                if suffix in self.GPT52_REASONING_EFFORTS:
+                    actual_model = "GPT-5.2"
+                    extra_params["reasoning_effort"] = suffix
+                    if self.valves.DEBUG_MODE:
+                        logger.debug(f"[{self.name}] Parsed GPT-5.2 reasoning_effort: {suffix}")
+        
+        # 处理 Gemini-3-Pro 系列: Gemini-3-Pro-{level} 或 Gemini-3-Pro-{budget}
+        elif model_id.upper().startswith("GEMINI-3-PRO-"):
+            parts = model_id.rsplit("-", 1)
+            if len(parts) == 2:
+                suffix = parts[1].lower()
+                # 检查是否是 thinking_level 枚举值
+                if suffix in self.GEMINI3_THINKING_LEVELS:
+                    actual_model = "Gemini-3-Pro"
+                    extra_params["thinking_level"] = suffix
+                    if self.valves.DEBUG_MODE:
+                        logger.debug(f"[{self.name}] Parsed Gemini-3-Pro thinking_level: {suffix}")
+                # 检查是否是数字 (thinking_budget)
+                elif suffix.isdigit():
+                    actual_model = "Gemini-3-Pro"
+                    extra_params["thinking_budget"] = int(suffix)
+                    if self.valves.DEBUG_MODE:
+                        logger.debug(f"[{self.name}] Parsed Gemini-3-Pro thinking_budget: {suffix}")
+        
+        return actual_model, extra_params
+
     def _build_request_body(self, model_id: str, messages: List[dict], body: dict) -> dict:
         """
         构建请求体，核心功能：识别并透传 extra_body 参数
         
         处理逻辑：
-        1. 提取标准 OpenAI 参数
-        2. 其余参数作为 extra_body 透传到 Poe
+        1. 解析模型 ID 中嵌入的参数
+        2. 提取标准 OpenAI 参数
+        3. 其余参数作为 extra_body 透传到 Poe
         """
+        # 解析模型 ID 中的嵌入参数
+        actual_model, model_params = self._parse_model_params(model_id)
+        
         # 基础请求体
         request_body = {
-            "model": model_id,
+            "model": actual_model,
             "messages": messages,
             "stream": body.get("stream", True)
         }
+        
+        # 应用从模型 ID 解析出的参数
+        for key, value in model_params.items():
+            request_body[key] = value
         
         # 添加标准可选参数
         for param in ["temperature", "max_tokens", "top_p", 
